@@ -1,0 +1,29 @@
+$ /usr/bin/time -l sbcl --dynamic-space-size 4096 --script tools/benchmark.lisp .cache/models/Qwen3-0.6B-Q8_0.gguf 3 lisp
+ENGINE LISP
+PREPARATION 0.593991
+SPLIT-WEIGHT-BYTES 670482432
+LOAD 0.351656
+MAPPED-BYTES 639446688
+KV-BYTES 58720256
+TRIAL 0 PREFILL-TOKENS 5 PREFILL-SECONDS 6.372863 PREFILL-ALLOCATIONS 6092712912 DECODE-TOKENS 16 DECODE-SECONDS 20.534433 DECODE-ALLOCATIONS 19496707936
+TRIAL 1 PREFILL-TOKENS 5 PREFILL-SECONDS 6.376887 PREFILL-ALLOCATIONS 6093020240 DECODE-TOKENS 16 DECODE-SECONDS 20.7393 DECODE-ALLOCATIONS 19496758640
+TRIAL 2 PREFILL-TOKENS 5 PREFILL-SECONDS 6.432958 PREFILL-ALLOCATIONS 6092446992 DECODE-TOKENS 16 DECODE-SECONDS 20.710487 DECODE-ALLOCATIONS 19496730960
+LISP-BACKEND LISP
+      108.25 real       313.38 user         0.91 sys
+          1712930816  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              142209  page reclaims
+                   5  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                2863  signals received
+                1598  voluntary context switches
+              119162  involuntary context switches
+       4483340163938  instructions retired
+        938857489958  cycles elapsed
+          1097995008  peak memory footprint

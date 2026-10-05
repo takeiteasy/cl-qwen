@@ -30,7 +30,7 @@ def ids(stdout, label):
 
 
 def run(command, prefix):
-    result = subprocess.run([str(x) for x in command], text=True, capture_output=True, timeout=300)
+    result = subprocess.run([str(x) for x in command], text=True, capture_output=True, timeout=3600)
     prefix.with_suffix(".out").write_text(result.stdout)
     prefix.with_suffix(".err").write_text(result.stderr)
     if result.returncode:
@@ -50,9 +50,10 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / ".cache/validation")
     parser.add_argument("--tokens", type=int, default=16)
     parser.add_argument("--only", help="Run case names containing this substring")
+    parser.add_argument("--engine", choices=["native", "kernel", "lisp"], default="native")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    report = {"reference_revision": "b809b886d94107349f4e2b1a0d4713d8566565aa", "tokens": args.tokens,
+    report = {"engine": args.engine, "reference_revision": "b809b886d94107349f4e2b1a0d4713d8566565aa", "tokens": args.tokens,
               "reference_cache": "f32", "reference_threads": 1, "batch_size": 1, "models": {}, "cases": []}
     failures = []
     for kind in ["F32", "Q8_0"]:
@@ -70,7 +71,7 @@ def main():
             lisp_logits = lisp_prefix.with_suffix(".logits")
             reference = run([args.reference, model, prompt, int(is_chat), args.tokens, ref_logits], ref_prefix)
             actual = run(["sbcl", "--dynamic-space-size", "4096", "--script", ROOT / "tools/inspect.lisp",
-                          model, prompt, int(is_chat), args.tokens, lisp_logits], lisp_prefix)
+                          model, prompt, int(is_chat), args.tokens, lisp_logits, 1, args.engine], lisp_prefix)
             a = np.fromfile(lisp_logits, dtype="<f4").reshape(-1, 151936)
             b = np.fromfile(ref_logits, dtype="<f4").reshape(-1, 151936)
             same_tokens = actual == reference
@@ -86,7 +87,7 @@ def main():
             worker_prefix = args.output / (name + "-workers")
             worker_logits = worker_prefix.with_suffix(".logits")
             parallel = run(["sbcl", "--dynamic-space-size", "4096", "--script", ROOT / "tools/inspect.lisp",
-                            model, prompt, int(is_chat), args.tokens, worker_logits, 3], worker_prefix)
+                            model, prompt, int(is_chat), args.tokens, worker_logits, 3, args.engine], worker_prefix)
             c = np.fromfile(worker_logits, dtype="<f4")
             case["workers_match"] = parallel == actual and c.shape == a.ravel().shape and bool(np.allclose(c, a.ravel(), atol=1e-6, rtol=1e-6))
             if not same_tokens or not case["workers_match"] or not case.get("logits_within_tolerance", True):

@@ -12,7 +12,7 @@
   :depends-on ("cl-qwen/gguf" "trivial-simd/blas" "bordeaux-threads" "cl-ppcre-unicode")
   :serial t
   :components ((:file "src/package") (:file "src/numeric")
-               (:file "src/tokenizer") (:file "src/model") (:file "src/session"))
+               (:file "src/tokenizer") (:file "src/model") (:file "src/session") (:file "src/kernel-numeric"))
   :in-order-to ((asdf:test-op (asdf:test-op "cl-qwen/tests"))))
 
 (asdf:defsystem "cl-qwen/tests"

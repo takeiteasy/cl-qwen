@@ -1,12 +1,12 @@
 (load (merge-pathnames "bootstrap.lisp" *load-truename*))
 (defun usage ()
-  (format t "Usage: sbcl --dynamic-space-size 4096 --script tools/cli.lisp~%  --model FILE (--prompt TEXT | --prompt-file FILE)~%  [--mode raw|chat] [--system TEXT] [--context N] [--workers N] [--tokens N]~%"))
+  (format t "Usage: sbcl --dynamic-space-size 4096 --script tools/cli.lisp~%  --model FILE (--prompt TEXT | --prompt-file FILE)~%  [--engine native|kernel|lisp] [--mode raw|chat] [--system TEXT] [--context N] [--workers N] [--tokens N]~%"))
 (defun main ()
   (let ((args (uiop:command-line-arguments)) (options (make-hash-table :test 'equal)))
     (when (member "--help" args :test #'string=) (usage) (return-from main))
     (loop while args
           for key = (pop args)
-          do (unless (member key '("--model" "--prompt" "--prompt-file" "--mode" "--system" "--context" "--workers" "--tokens") :test #'string=)
+          do (unless (member key '("--engine" "--model" "--prompt" "--prompt-file" "--mode" "--system" "--context" "--workers" "--tokens") :test #'string=)
                (error "Unknown option ~A" key))
              (unless args (error "Missing value for ~A" key))
              (when (gethash key options) (error "Duplicate option ~A" key))
@@ -19,7 +19,8 @@
       (let ((model (cl-qwen:load-model (gethash "--model" options))))
         (unwind-protect
              (let ((session (cl-qwen:make-session
-                             model :context-size (parse-integer (gethash "--context" options "2048"))
+                             model :engine (intern (string-upcase (gethash "--engine" options "native")) :keyword)
+                             :context-size (parse-integer (gethash "--context" options "2048"))
                              :workers (parse-integer (gethash "--workers" options "1"))))
                    (prompt (or (gethash "--prompt" options) (uiop:read-file-string (gethash "--prompt-file" options)))))
                (multiple-value-bind (ids text)

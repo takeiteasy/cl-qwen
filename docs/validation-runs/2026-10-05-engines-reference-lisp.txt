@@ -1,0 +1,16 @@
+f32-raw-capital PASS max logits 0.0001277923583984375
+f32-raw-arithmetic PASS max logits 0.00015354156494140625
+f32-raw-unicode PASS max logits 9.1552734375e-05
+f32-raw-whitespace PASS max logits 0.00015926361083984375
+f32-chat-capital PASS max logits 0.00011718273162841797
+f32-chat-arithmetic PASS max logits 0.0001475811004638672
+f32-chat-unicode PASS max logits 0.00013828277587890625
+f32-chat-punctuation PASS max logits 0.00015354156494140625
+q8_0-raw-capital PASS max logits 0.5476055145263672
+q8_0-raw-arithmetic PASS max logits 0.300029993057251
+q8_0-raw-unicode PASS max logits 0.4750954583287239
+q8_0-raw-whitespace PASS max logits 0.3665304183959961
+q8_0-chat-capital PASS max logits 1.0506411790847778
+q8_0-chat-arithmetic PASS max logits 1.0506411790847778
+q8_0-chat-unicode PASS max logits 1.0506411790847778
+q8_0-chat-punctuation PASS max logits 1.0506411790847778

@@ -22,9 +22,10 @@ workers and releases the mapping.
 | `(load-model path)` | Validates weights/metadata and owns a read-only mapping |
 | `(close-model model)` | Waits for active calls, closes all sessions; repeated calls are harmless |
 | `(model-metadata model)` | Returns the parsed metadata table; treat it as read-only |
-| `(make-session model &key context-size workers)` | Defaults to 2,048 tokens and one worker |
+| `(make-session model &key context-size workers engine)` | Defaults to 2,048 tokens, one worker and `:native` |
 | `(close-session session)` | Joins workers and releases cache; repeated calls are harmless |
 | `(reset-session session)` | Resets position to zero and returns the session |
+| `(session-engine session)` | Returns `:native`, `:kernel` or `:lisp`; fixed at creation |
 | `(session-position session)` | Returns the number of tokens consumed |
 | `(tokenize model text &key special-tokens)` | Returns a simple unsigned-byte-32 token vector |
 | `(detokenize model ids &key special-tokens)` | Returns UTF-8 text; hides special tokens by default |
@@ -52,6 +53,9 @@ sbcl --dynamic-space-size 4096 --script tools/cli.lisp \
   --model model.gguf --mode chat --prompt 'Hello' \
   --system 'Answer briefly.' --tokens 16 --context 256 --workers 3
 ```
+
+`--engine` accepts `native` (default), `kernel` or `lisp`. See
+[execution engines](execution.md) for numerical behavior and library requirements.
 
 Use exactly one of `--prompt` and `--prompt-file`. `--mode` defaults to `raw`;
 `--system` requires `chat`. `--help` lists options. The CLI prints completion

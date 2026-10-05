@@ -17,7 +17,7 @@
        (limit (parse-integer (fourth args)))
        (workers (if (sixth args) (parse-integer (sixth args)) 1))
        (tokens (tokenize model text :special-tokens special))
-       (session (make-session model :context-size (max 256 (+ (length tokens) limit)) :workers workers)))
+       (session (make-session model :context-size (max 256 (+ (length tokens) limit)) :workers workers :engine (intern (string-upcase (or (seventh args) "native")) :keyword))))
   (unwind-protect
        (with-open-file (out (fifth args) :direction :output :if-exists :supersede :element-type '(unsigned-byte 8))
          (format t "INPUT~{ ~D~}~%" (coerce tokens 'list))

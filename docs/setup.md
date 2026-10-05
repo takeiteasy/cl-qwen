@@ -15,8 +15,10 @@ cmake --build build
 
 `tools/bootstrap.lisp` loads CFFI, Bordeaux Threads, Babel, Unicode-aware
 CL-PPCRE and trivial-simd through Quicklisp. FiveAM is a test dependency.
-The numerical library is required for Q8_0; F32 uses trivial-simd's selected
-backend.
+The cl-qwen numerical library is required for native Q8_0 sessions. Kernel and
+Lisp sessions do not require it. For entirely Lisp numerical execution, skip
+both builds and run with `TRIVIAL_SIMD_BACKEND=lisp` and `--engine lisp`.
+See [execution engines](execution.md) for the alternatives and shared storage.
 
 ## Download reproducible models
 

@@ -28,7 +28,7 @@
          (trivial-simd:convert! values (trivial-simd:make-vector-view ptr :u16 (* rows columns))
                                :input-encoding (if (= type 1) :f16 :bf16))
          (make-weight :columns columns :rows rows :encoding :f32 :storage values)))
-      (8 (ensure-native) (make-weight :columns columns :rows rows :encoding :q8 :storage ptr)))))
+      (8 (make-weight :columns columns :rows rows :encoding :q8 :storage ptr)))))
 (defun load-model (path)
   (let ((mapping (cl-qwen/gguf:open-gguf path)) (success nil))
     (unwind-protect
@@ -106,6 +106,8 @@
     (unwind-protect
          (progn
            (dolist (session sessions) (close-session session))
+           (dolist (weight (model-weights model))
+             (setf (weight-quantized weight) nil (weight-scales weight) nil))
            (cl-qwen/gguf:close-gguf (model-mapping model)))
       (bt:with-lock-held ((model-lock model))
         (setf (model-state model) :closed (model-sessions model) nil)

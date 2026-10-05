@@ -1,5 +1,5 @@
 {
-  "engine": "native",
+  "engine": "kernel",
   "reference_revision": "b809b886d94107349f4e2b1a0d4713d8566565aa",
   "tokens": 16,
   "reference_cache": "f32",

@@ -1,0 +1,9 @@
+Test project /Users/george/git/cl-qwen/build
+    Start 1: q8_test
+1/2 Test #1: q8_test ..........................   Passed    0.16 sec
+    Start 2: q8_scalar_test
+2/2 Test #2: q8_scalar_test ...................   Passed    0.04 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   0.20 sec

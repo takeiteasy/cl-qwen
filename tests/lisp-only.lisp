@@ -1,0 +1,20 @@
+(load (merge-pathnames "../tools/bootstrap.lisp" *load-truename*))
+(assert (eq :lisp (trivial-simd:backend)))
+(assert (not trivial-simd::*native-available-p*))
+(dolist (format '("f32" "q8"))
+  (let ((model (cl-qwen:load-model
+                (asdf:system-relative-pathname "cl-qwen" (format nil ".cache/fixtures/~A.gguf" format)))))
+    (unwind-protect
+         (let ((expected nil))
+           (when (string= format "q8")
+             (assert (handler-case
+                         (progn (cl-qwen:make-session model :engine :native :context-size 8) nil)
+                       (error () t))))
+           (dolist (engine '(:kernel :lisp))
+             (dolist (workers '(1 3))
+               (let* ((session (cl-qwen:make-session model :context-size 8 :engine engine :workers workers))
+                      (ids (cl-qwen:generate session "abc" :max-tokens 3)))
+                 (if expected (assert (equalp ids expected)) (setf expected ids))
+                 (assert (not cl-qwen::*native-loaded*))))))
+      (cl-qwen:close-model model))))
+(format t "Lisp-only F32/Q8 engines pass without numerical libraries.~%")

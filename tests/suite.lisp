@@ -144,6 +144,168 @@
       (is (cl-qwen/gguf:gguf-closed-p (cl-qwen::model-mapping model)))
       (signals error (cl-qwen:reset-session session)))))
 
+(test activation-quantization
+  (cl-qwen::ensure-native)
+  (let ((input (cl-qwen::floats 128)) (values (cl-qwen::floats 128))
+        (scales (cl-qwen::floats 4))
+        (packed (make-array 136 :element-type '(unsigned-byte 8))))
+    (dotimes (trial 12)
+      (dotimes (i 128)
+        (setf (aref input i)
+              (case trial
+                (0 0.0)
+                (1 (if (zerop (mod i 32)) 127.0 (float (- (mod i 15) 7.5) 1.0)))
+                (2 (scale-float (float (- (mod i 31) 15) 1.0) -140))
+                (3 (scale-float (float (- (mod i 31) 15) 1.0) -20))
+                (t (* (float (- (mod (* i (+ trial 3)) 255) 127) 1.0) (float trial 1.0))))))
+      (cl-qwen::quantize-activation! input values scales)
+      (sb-sys:with-pinned-objects (input packed)
+        (is (zerop (cl-qwen::q8-pack (sb-sys:vector-sap input) (sb-sys:vector-sap packed) 128))))
+      (dotimes (block 4)
+        (is (= (aref scales block)
+               (cl-qwen::half-float (logior (aref packed (* block 34))
+                                            (ash (aref packed (1+ (* block 34))) 8)))))
+        (dotimes (i 32)
+          (let ((byte (aref packed (+ (* block 34) i 2))))
+            (is (= (aref values (+ (* block 32) i)) (if (< byte 128) byte (- byte 256))))))))
+    (setf (aref input 0) most-positive-single-float)
+    (signals error (cl-qwen::quantize-activation! input values scales))
+    (dolist (bits '(#x7f800000 #xff800000 #x7fc00000))
+      (setf (aref input 0) (sb-kernel:make-single-float
+                            (if (logbitp 31 bits) (- bits (ash 1 32)) bits)))
+      (signals error (cl-qwen::quantize-activation! input values scales)))))
+
+(test engine-sessions
+  (dolist (format '("f32" "q8"))
+    (let* ((model (cl-qwen:load-model (fixture-path (concatenate 'string format ".gguf"))))
+           (native (cl-qwen:make-session model :context-size 8))
+           (sessions (loop for engine in '(:kernel :lisp)
+                           append (loop for workers in '(1 3 40)
+                                        collect (cl-qwen:make-session model :context-size 8
+                                                                     :engine engine :workers workers))))
+           (backend (trivial-simd:backend)))
+      (unwind-protect
+           (progn
+             (dolist (token '(97 98 99))
+               (let ((expected (copy-seq (cl-qwen:step! native token))))
+                 (dolist (session sessions)
+                   (let ((actual (cl-qwen:step! session token)))
+                     (dotimes (i (length actual))
+                       (is (approximate (aref actual i) (aref expected i) 0.000001)
+                           "~A ~A workers ~D token ~D logit ~D: ~A/~A"
+                           format (cl-qwen:session-engine session)
+                           (length (cl-qwen::pool-errors (cl-qwen::session-pool session)))
+                           token i (aref actual i) (aref expected i)))))))
+             (let ((expected (cl-qwen:generate native "abc" :max-tokens 3)))
+               (dolist (session sessions)
+                 (is (equalp expected (cl-qwen:generate session "abc" :max-tokens 3)))
+                 (cl-qwen:reset-session session)
+                 (is (= 0 (cl-qwen:session-position session)))))
+             (is (eq backend (trivial-simd:backend)))
+             (signals error (cl-qwen:make-session model :engine :unknown))
+             (signals error (cl-qwen:make-session model :engine :kernel :workers 0))
+             (when (string= format "q8")
+               (let* ((weight (cl-qwen::model-output model)) (cache (cl-qwen::weight-quantized weight)))
+                 (cl-qwen:make-session model :engine :kernel :context-size 8)
+                 (is (eq cache (cl-qwen::weight-quantized weight)))
+                 (cl-qwen:close-model model)
+                 (is (null (cl-qwen::weight-quantized weight))))))
+        (cl-qwen:close-model model)))))
+
+(test q8-loading-without-native
+  (let* ((cl-qwen::*native-loaded* nil)
+         (model (cl-qwen:load-model (fixture-path "q8.gguf"))))
+    (unwind-protect
+         (progn
+           (is (not cl-qwen::*native-loaded*))
+           (dolist (engine '(:kernel :lisp))
+             (let ((session (cl-qwen:make-session model :context-size 4 :engine engine :workers 3)))
+               (cl-qwen:step! session 97)
+               (is (eq engine (cl-qwen:session-engine session)))
+               (is (not cl-qwen::*native-loaded*)))))
+      (cl-qwen:close-model model))))
+
+(test attention-reduction-order
+  (let ((trivial-simd::*backend* :native))
+    (dolist (n '(0 1 2 3 4 5 7 16 32 128 129 257))
+      (let ((a (cl-qwen::floats (+ n 8))) (b (cl-qwen::floats (+ n 8))))
+        (dotimes (i (+ n 8))
+          (setf (aref a i) (* 0.1234567 (float (- (mod (* i 13) 37) 18) 1.0))
+                (aref b i) (* 0.7654321 (float (- (mod (* i 19) 41) 20) 1.0))))
+        (is (= (sb-kernel:single-float-bits (cl-qwen::four-lane-dot a b 3 5 n))
+               (sb-kernel:single-float-bits
+                (funcall #'trivial-simd:dot a b :left-start 3 :right-start 5 :end n))))))))
+
+(test multi-block-matvec
+  (dolist (width '(32 64 96 1024))
+    (dolist (rows '(1 3 9))
+      (let* ((blocks (/ width 32)) (size (* rows blocks 34))
+             (input (cl-qwen::floats width)) (expected (cl-qwen::floats rows)))
+        (dotimes (i width) (setf (aref input i) (* 0.012345 (float (- (mod (* i 17) 255) 127) 1.0))))
+        (cffi:with-foreign-object (storage :uint8 size)
+          (dotimes (block (* rows blocks))
+            (let ((scale (nth (mod block 5) '(#x0000 #x0001 #x0400 #x3c00 #xb800)))
+                  (offset (* block 34)))
+              (setf (cffi:mem-aref storage :uint8 offset) (ldb (byte 8 0) scale)
+                    (cffi:mem-aref storage :uint8 (1+ offset)) (ldb (byte 8 8) scale))
+              (dotimes (i 32)
+                (setf (cffi:mem-aref storage :int8 (+ offset i 2)) (- (mod (+ (* block 29) (* i 17)) 256) 128)))))
+          (let* ((weight (cl-qwen::make-weight :storage storage :rows rows :columns width :encoding :q8))
+                 (model (cl-qwen::%make-model :embedding weight :output weight :layers #())))
+            (cl-qwen::prepare-kernel-weights model)
+            (cl-qwen::matvec weight input expected)
+            (dolist (engine '(:kernel :lisp))
+              (dolist (workers '(1 3 12))
+                (let* ((pool (cl-qwen::make-pool workers))
+                       (session (cl-qwen::%make-session
+                                 :engine engine :pool pool :activation (cl-qwen::floats width)
+                                 :activation-scales (cl-qwen::floats blocks)
+                                 :block-results (map 'vector (lambda (i) (declare (ignore i))
+                                                              (cl-qwen::floats (ceiling rows workers)))
+                                                     (make-array workers))))
+                       (actual (cl-qwen::floats rows))
+                       (trivial-simd::*backend* (if (eq engine :lisp) :lisp (trivial-simd:backend))))
+                  (unwind-protect
+                       (progn
+                         (cl-qwen::matvec weight input actual pool nil session)
+                         (is (equalp expected actual)))
+                    (cl-qwen::close-pool pool)))))))))))
+
+(test kernel-worker-stress
+  (let* ((model (cl-qwen:load-model (fixture-path "q8.gguf")))
+         (one (cl-qwen:make-session model :context-size 8 :engine :kernel))
+         (sessions (loop for engine in '(:kernel :lisp)
+                         collect (cl-qwen:make-session model :context-size 8 :engine engine :workers 3))))
+    (unwind-protect
+         (dotimes (trial 100)
+           (cl-qwen:reset-session one)
+           (dolist (session sessions) (cl-qwen:reset-session session))
+           (dolist (token '(97 98 99))
+             (let ((expected (copy-seq (cl-qwen:step! one token))))
+               (dolist (session sessions)
+                 (is (equalp expected (cl-qwen:step! session token))))))
+           (when (zerop (mod trial 5)) (sb-ext:gc)))
+      (cl-qwen:close-model model))))
+
+(test concurrent-engine-sessions
+  (let* ((model (cl-qwen:load-model (fixture-path "q8.gguf")))
+         (sessions (loop for engine in '(:native :kernel :lisp)
+                         collect (cl-qwen:make-session model :context-size 8 :engine engine :workers 3)))
+         (outputs (make-array 3)) (errors (make-array 3 :initial-element nil)))
+    (unwind-protect
+         (let ((threads (loop for session in sessions for index from 0
+                             collect (let ((s session) (i index))
+                                       (bt:make-thread
+                                        (lambda ()
+                                          (handler-case
+                                              (setf (aref outputs i) (cl-qwen:generate s "abc" :max-tokens 3))
+                                            (error (c) (setf (aref errors i) c)))))))))
+           (dolist (thread threads) (bt:join-thread thread))
+           (is (every #'null errors))
+           (is (equalp (aref outputs 0) (aref outputs 1)))
+           (is (equalp (aref outputs 0) (aref outputs 2))))
+      (cl-qwen:close-model model))))
+
 (defun run-tests ()
   (uiop:run-program (list "python3" (namestring (asdf:system-relative-pathname "cl-qwen" "tests/fixtures.py"))
                           (namestring (fixture-path ""))) :output *standard-output* :error-output *error-output*)

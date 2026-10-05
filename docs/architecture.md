@@ -9,24 +9,29 @@ not model, tokenizer or generation state.
 | Lisp model | BPE, Qwen layers, attention, KV cache, RoPE preparation, sampling and scheduling |
 | `trivial-simd/blas` | F32 matrix-vector arithmetic |
 | `trivial-simd` | Vector arithmetic, copies, conversion and attention reductions |
-| Small C library | Q8_0 activation packing and packed-weight matvec |
+| Small C library | Native-engine Q8_0 activation packing and packed-weight matvec |
+| `define-kernel` | Alternative Q8_0 block dots and Lisp-engine F32 row dots |
 
 ## Storage and arithmetic
 
 Weights use private flat descriptors: storage, encoding, rows and columns.
 F32 and Q8_0 weights remain mapped; F16/BF16 weights widen to F32 once at load.
+Kernel/Lisp sessions also share cached Q8 signed bytes and F32 block scales.
+[Engine selection](execution.md) belongs to each session.
 Norm weights are small F32 vectors. A missing output projection shares token
 embedding weights.[^qwen]
 
 Internal `(matvec weights activation output)` passes a destination. F32
-weights dispatch to `sgemv`; Q8_0 weights dispatch to packed integer dot
-products with F32 accumulation. Q8_0 matvec packs each 32-element activation
+weights dispatch to `sgemv` or the Lisp engine's row-dot kernel; Q8_0 weights
+dispatch to native packed dots or kernel block dots with Lisp accumulation.
+The native path uses packed integer dot products with F32 accumulation. Q8_0 matvec packs each 32-element activation
 block with an F16 scale and nearest-even signed bytes, matching the pinned
 ARM64 reference policy.[^quantization]
 
 Activations and KV cache use F32. RMSNorm accumulates F32 squares in F64 before
 rounding the mean to F32. Softmax subtracts the maximum and normalizes an F64
-sum of F32 exponentials. Typed Lisp supplies softmax, SiLU and RoPE stages.
+sum of F32 exponentials. Typed Lisp supplies softmax, SiLU and RoPE stages. Lisp-executed attention
+dots use four scalar lanes with the ARM64 native summation order.
 RoPE tables use recurrent F32 angles and are reused per session. Rotations
 use trivial-simd scalar FMA with the reference operation order.
 

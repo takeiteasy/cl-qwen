@@ -3,10 +3,17 @@
 (defun seconds-since (start) (/ (- (get-internal-real-time) start) (float internal-time-units-per-second 1.0)))
 (let* ((args (uiop:command-line-arguments)) (start (get-internal-real-time))
        (model (load-model (first args))) (load-seconds (seconds-since start))
-       (session (make-session model :context-size 256 :workers (parse-integer (or (second args) "1"))))
+       (prepare-start (get-internal-real-time))
+       (engine (intern (string-upcase (or (third args) "native")) :keyword))
+       (session (make-session model :engine engine :context-size 256 :workers (parse-integer (or (second args) "1"))))
+       (prepare-seconds (seconds-since prepare-start))
        (tokens (tokenize model "The capital of France is")))
   (unwind-protect
        (progn
+         (format t "ENGINE ~A~%PREPARATION ~F~%SPLIT-WEIGHT-BYTES ~D~%" engine prepare-seconds
+                 (loop for weight in (model-weights model)
+                       when (weight-quantized weight)
+                         sum (+ (length (weight-quantized weight)) (* 4 (length (weight-scales weight))))))
          (generate session tokens :max-tokens 16)
          (format t "LOAD ~F~%MAPPED-BYTES ~D~%KV-BYTES ~D~%"
                  load-seconds (cl-qwen/gguf::gguf-size (model-mapping model))
@@ -25,5 +32,5 @@
                (format t "TRIAL ~D PREFILL-TOKENS ~D PREFILL-SECONDS ~F PREFILL-ALLOCATIONS ~D DECODE-TOKENS ~D DECODE-SECONDS ~F DECODE-ALLOCATIONS ~D~%"
                        trial (length tokens) prefill (- decode-before before)
                        decoded (seconds-since decode-start) (- (sb-ext:get-bytes-consed) decode-before)))))
-         (format t "LISP-BACKEND ~A~%" (trivial-simd:backend)))
+         (format t "LISP-BACKEND ~A~%" (session-backend session)))
     (close-model model)))
