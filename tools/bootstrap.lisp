@@ -1,0 +1,10 @@
+(require :asdf)
+(unless (find-package :ql)
+  (let ((setup (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname))))
+    (when (probe-file setup) (load setup))))
+(let ((root (merge-pathnames "../" (uiop:pathname-directory-pathname *load-truename*))))
+  (asdf:initialize-source-registry
+   `(:source-registry (:directory ,root) (:directory ,(merge-pathnames "../trivial-simd/" root))
+                     :inherit-configuration)))
+(when (find-package :ql) (uiop:symbol-call :ql :quickload "cl-qwen" :silent t))
+(asdf:load-system "cl-qwen")

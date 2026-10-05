@@ -1,0 +1,7 @@
+build/
+.cache/
+*.fasl
+*.dylib
+*.so
+*.gguf
+__pycache__/

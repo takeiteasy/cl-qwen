@@ -1,0 +1,18 @@
+[ 12%] Building C object CMakeFiles/cl_qwen_numeric.dir/native/q8.c.o
+[ 25%] Linking C shared library libcl_qwen_numeric.dylib
+[ 25%] Built target cl_qwen_numeric
+[ 37%] Building C object CMakeFiles/q8_test.dir/native/q8.c.o
+[ 50%] Linking C executable q8_test
+[ 62%] Built target q8_test
+[ 75%] Building C object CMakeFiles/q8_scalar_test.dir/native/q8.c.o
+[ 87%] Linking C executable q8_scalar_test
+[100%] Built target q8_scalar_test
+Test project /Users/george/git/cl-qwen/build
+    Start 1: q8_test
+1/2 Test #1: q8_test ..........................   Passed    0.15 sec
+    Start 2: q8_scalar_test
+2/2 Test #2: q8_scalar_test ...................   Passed    0.14 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   0.29 sec
